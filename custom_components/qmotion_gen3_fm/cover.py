@@ -6,6 +6,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.exceptions import HomeAssistantError
 
 from .const import DOMAIN
+from .position import ha_to_qsync, qsync_to_ha
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -18,7 +19,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
 
 class QMotionCover(CoverEntity):
-    """A group whose position cannot be read back from the one-way FM motor."""
+    """A cover reporting last commanded position, never physical motor feedback."""
 
     _attr_assumed_state = True
     _attr_supported_features = (
@@ -38,26 +39,39 @@ class QMotionCover(CoverEntity):
             model="QSYNC433FM",
         )
         self._attr_available = True
+        # Byte 30 in the 60-byte FM record is the gateway's stored command
+        # position. It may be stale if the blind was moved using the remote.
+        self._last_commanded_position = qsync_to_ha(group.raw[30])
+        self._position_source = (
+            "gateway_record" if self._last_commanded_position is not None else "unknown"
+        )
 
     @property
     def current_cover_position(self):
-        # We deliberately do not report guessed motor state: handheld remote
-        # actions cannot be observed by this one-way RF gateway.
-        return None
+        return self._last_commanded_position
 
     @property
     def is_closed(self):
-        return None
+        if self._last_commanded_position is None:
+            return None
+        return self._last_commanded_position == 0
+
+    @property
+    def extra_state_attributes(self):
+        return {"position_source": self._position_source}
 
     async def _send(self, hass_position: int) -> None:
-        # Home Assistant: 0=closed, 100=open. QSync: 0=open, 100=closed.
-        qsync_position = 100 - hass_position
+        qsync_position = ha_to_qsync(hass_position)
         try:
             await self.hass.async_add_executor_job(
                 self._gateway.set_position, self._channel, qsync_position
             )
         except (OSError, ValueError) as err:
             raise HomeAssistantError(f"QSync command failed: {err}") from err
+        # Transport completion is not an acknowledgement from the FM motor.
+        self._last_commanded_position = hass_position
+        self._position_source = "home_assistant_command"
+        self.async_write_ha_state()
 
     async def async_open_cover(self, **kwargs):
         await self._send(100)
