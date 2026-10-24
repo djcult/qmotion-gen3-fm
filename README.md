@@ -4,15 +4,17 @@ Independent Python implementation of the **QMotion Gen 3 FM** protocol using the
 
 ## Status
 
-**Early development (v0.1.0 foundation).** Tested on a real gateway at TCP port 9760:
+**v0.1.0 — first hardware-tested Home Assistant release.** Tested on a QSYNC433FM gateway on 24 October 2026:
 
 - Gateway group synchronisation (`16 00`)
 - Special Learn preparation and physical-tug pairing
 - Pairing completion
 - Open and close via position commands (`0` fully open, `100` fully closed)
-- Existing handheld remote remains functional
+- Existing handheld remote remains functional after adding the gateway
+- Standalone CLI group creation and deletion using a disposable FM group
+- HACS installation and Home Assistant cover control (confirmed working with a real blind)
 
-Group creation and deletion have been verified on a real gateway. Gateway erase is implemented but not tested from Python. Intermediate positions, stop, motor feedback and Home Assistant integration remain unverified or unimplemented.
+**Still unverified or unsupported:** gateway erase from Python, intermediate-position accuracy, Stop, actual motor-position feedback, and dynamic group discovery without reloading the integration.
 
 ## Installation and CLI
 
@@ -21,7 +23,9 @@ Python 3.10+:
 ```bash
 git clone https://github.com/djcult/qmotion-gen3-fm.git
 cd qmotion-gen3-fm
-python3 -m pip install -e .
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
 qmotion-admin --host 192.168.1.206 groups
 ```
 
@@ -135,7 +139,7 @@ qmotion-admin --host 192.168.1.206 pair homeassistant --send
 
 Default pairing dry-run performs group discovery and simulates all steps without sending RF commands. No physical tug is needed for rehearsal.
 
-## Home Assistant integration (initial experimental release)
+## Home Assistant integration (v0.1.0)
 
 The `custom_components/qmotion_gen3_fm/` folder is structured for HACS.
 It bundles a byte-identical copy of this project's own gateway and protocol
@@ -180,5 +184,15 @@ python scripts/sync_vendor.py --check
 python -m unittest discover -s tests -v
 ```
 
-The integration is at an **experimental pre-release stage** and has not
-yet been tested on a running Home Assistant instance.
+The integration's installation and basic blind control have been **confirmed working in Home Assistant on real hardware**. This is an early release: intermediate percentages, Stop, state reporting, multi-group setups and long-term reliability still need broader testing.
+
+## Compatibility and limitations
+
+- **Verified hardware:** QMotion Gen 3 FM blind using the QSYNC433FM gateway (TCP port 9760). Other QMotion generations, AM gateways, and models are untested.
+- **Verified HA functions:** HACS installation and basic control from a Home Assistant cover entity (24 October 2026).
+- **FM status:** The system provides one-way RF control. The handheld remote can move the blind without HA knowing; no actual position is reported.
+- **Group administration:** Use the standalone CLI, not Home Assistant. Group changes require reloading the integration.
+- **Gateway erase:** Implemented with a guarded `--send` option but intentionally not exercised from Python against the working gateway.
+- **Experimental:** Preset/percentage positions between the two end limits and the stop command still require validation.
+
+See [CHANGELOG.md](CHANGELOG.md) for release details.
