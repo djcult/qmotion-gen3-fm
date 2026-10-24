@@ -15,7 +15,7 @@ def confirm(token, message):
     if input(f"{message}\nType {token} to continue: ").strip() != token:
         raise SystemExit("Cancelled; no command sent")
 
-def run_pairing(gateway, group, ask=input, output=print, dry_run=False):
+def run_pairing(gateway, group, ask=input, output=print, dry_run=True):
     """Guide an operator through pairing without modifying unrelated groups.
 
     The motor's physical jog is the only confirmation of successful RF reception.
@@ -31,7 +31,8 @@ def run_pairing(gateway, group, ask=input, output=print, dry_run=False):
     output(f"  Completion:  {finish.hex(' ')}")
     output("This procedure modifies the motor's learned controller assignments.")
     output("Keep the original handheld remote available; do not reset the blind.")
-    if ask("Raise the blind FULLY using its remote. Type READY when positioned: ").strip() != "READY":
+    ready_prompt = "Simulate blind fully raised. Type READY: " if dry_run else "Raise the blind FULLY using its remote. Type READY when positioned: "
+    if ask(ready_prompt).strip() != "READY":
         output("Cancelled: no RF command sent.")
         return False
 
@@ -41,9 +42,14 @@ def run_pairing(gateway, group, ask=input, output=print, dry_run=False):
     if not dry_run:
         gateway.prepare_pairing(group.channel)
     output("Preparation " + ("simulated (NOT transmitted)." if dry_run else "transmitted. Watch for the blind to lower toward its learn position."))
-    output("Once movement stops, gently tug the accessible blind cord.")
-    output("The motor should give a short JOG confirming selection.")
-    if ask("Did the blind JOG after your tug? Type JOG to proceed: ").strip() != "JOG":
+    if dry_run:
+        output("SIMULATION: no motor movement or physical tug required.")
+        jog_prompt = "Simulate a motor jog. Type JOG to proceed: "
+    else:
+        output("Once movement stops, gently tug the accessible blind cord.")
+        output("The motor should give a short JOG confirming selection.")
+        jog_prompt = "Did the blind JOG after your tug? Type JOG to proceed: "
+    if ask(jog_prompt).strip() != "JOG":
         output("Stopped: pairing completion was NOT sent. If learning times out, restart pairing.")
         return False
 
@@ -53,8 +59,10 @@ def run_pairing(gateway, group, ask=input, output=print, dry_run=False):
     if not dry_run:
         gateway.complete_pairing(group)
     output("Completion " + ("simulated (NOT transmitted)." if dry_run else "command transmitted."))
-    output("Watch for another jog and the blind returning to its upper limit.")
-    output("Verify open/close separately, and verify the original remote still works.")
+    if not dry_run:
+        output("Watch for another jog and the blind returning to its upper limit.")
+    if not dry_run:
+        output("Verify open/close separately, and verify the original remote still works.")
     output("No motor acknowledgement is available over this one-way RF protocol.")
     return True
 
@@ -68,7 +76,7 @@ def main():
     position.add_argument("percent", type=int)
     pair = sub.add_parser("pair", help="Guided physical-tug pairing")
     pair.add_argument("group")
-    pair.add_argument("--dry-run", action="store_true", help="Rehearse all prompts without sending any RF commands")
+    pair.add_argument("--send", action="store_true", help="Transmit real pairing commands after confirmation; default is dry-run")
     create = sub.add_parser("create", help="Create a group (experimental)")
     create.add_argument("name")
     create.add_argument("--mac", help="Gateway MAC; required if no existing group provides it")
@@ -124,7 +132,7 @@ def main():
         return
     elif args.command == "pair":
         group = choose(groups, args.group)
-        run_pairing(gateway, group, dry_run=args.dry_run)
+        run_pairing(gateway, group, dry_run=not args.send)
         return
     if not args.send:
         print("DRY RUN: nothing transmitted. Add --send to permit transmission.")
