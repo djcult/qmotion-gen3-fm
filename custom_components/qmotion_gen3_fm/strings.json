@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to QSync FM gateway",
+        "description": "Enter the QSync FM gateway's IP address.",
+        "data": {
+          "host": "Gateway IP address"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot read groups from the gateway"
+    }
+  }
+}
