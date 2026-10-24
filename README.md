@@ -41,7 +41,7 @@ Commands that transmit RF require interactive confirmation. **Pair only when phy
 - `src/qmotion_gen3_fm/gateway.py`: TCP transport, group parsing and operations
 - `src/qmotion_gen3_fm/cli.py`: standalone administration CLI
 - `tests/`: offline protocol tests
-- Future: `custom_components/qmotion_gen3_fm/` read/control-only Home Assistant integration, using the same library
+- `custom_components/qmotion_gen3_fm/`: HACS-compatible cover integration using a bundled copy of the same library
 
 The gateway is authoritative for group configuration. Records are distinguished using both channel and page address; duplicate channel values should be investigated, not silently deduplicated.
 
@@ -134,3 +134,51 @@ qmotion-admin --host 192.168.1.206 pair homeassistant --send
 ```
 
 Default pairing dry-run performs group discovery and simulates all steps without sending RF commands. No physical tug is needed for rehearsal.
+
+## Home Assistant integration (initial experimental release)
+
+The `custom_components/qmotion_gen3_fm/` folder is structured for HACS.
+It bundles a byte-identical copy of this project's own gateway and protocol
+implementation under `vendor/`; there are **no runtime dependencies on a
+third-party QSync library or an unpublished PyPI package**.
+
+**Install (manual):**
+
+1. Copy `custom_components/qmotion_gen3_fm/` from this repository into
+   your HA configuration's `custom_components/` directory.
+2. Restart Home Assistant.
+3. Open Settings → Devices & services → Add integration → **QMotion Gen 3 FM**.
+4. Enter your gateway IP (example: `192.168.1.206`).
+5. The integration reads existing gateway groups and exposes one cover per
+   group. The group setup/pairing CLI remains separate.
+
+**Install using HACS:** Add
+`https://github.com/djcult/qmotion-gen3-fm` as a custom
+**Integration** repository in HACS, download it, restart Home Assistant,
+and add it under Devices & services. This repository has not yet been
+submitted to a curated catalog.
+
+**Features:** Open, Close, and Set Position (0% closed, 100% open in HA).
+The integration reverses percentages to QSync's wire convention (0% open,
+100% closed). The two end positions were verified with real hardware in
+the CLI; intermediate positions are not yet physically verified.
+**Stop is intentionally not exposed**, as its command is unverified.
+
+**Important:** FM control is one-way. The gateway does not report actual
+motor position or changes from the handheld remote. The integration does
+not fabricate a current position: its cover state may show unknown/assumed.
+TCP transmission does not mean that the motor received the RF command.
+Group additions/deletions are discovered on HA integration reload/restart,
+not continuously. Do not pair or erase from inside HA; use `qmotion-admin`.
+
+**Developer:** Keep the bundled library in sync whenever the Python
+library changes:
+
+```bash
+python scripts/sync_vendor.py
+python scripts/sync_vendor.py --check
+python -m unittest discover -s tests -v
+```
+
+The integration is at an **experimental pre-release stage** and has not
+yet been tested on a running Home Assistant instance.
