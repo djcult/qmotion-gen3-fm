@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Home Assistant cover now exposes last-commanded position as **assumed** rather than always unknown.
+- At startup, initial position comes from the gateway's stored FM group position, if valid.
+- HA position updates only after TCP send succeeds; it is not motor feedback and physical remote use can make it stale.
+- Added regression tests for the opposite QSync and Home Assistant percentage conventions.
+
 ## v0.1.0 — 2026-10-24
 
 First hardware-tested release of an independent QMotion Gen 3 FM implementation.
