@@ -12,7 +12,7 @@ Independent Python implementation of the **QMotion Gen 3 FM** protocol using the
 - Open and close via position commands (`0` fully open, `100` fully closed)
 - Existing handheld remote remains functional
 
-Group creation, deletion, factory erase, intermediate positions, stop, motor feedback and Home Assistant integration **are not yet verified or implemented**. They are planned work, not advertised as supported features.
+Group creation and deletion have been verified on a real gateway. Gateway erase is implemented but not tested from Python. Intermediate positions, stop, motor feedback and Home Assistant integration remain unverified or unimplemented.
 
 ## Installation and CLI
 
@@ -64,16 +64,14 @@ python3 -m unittest discover -s tests
 
 ## Safety
 
-No gateway erase or group deletion is currently exposed in the CLI. Such operations will be added only after careful protocol validation and with explicit confirmation.
+Delete and erase are available only with `--send` and explicit confirmation.
 
 
 ## Experimental administration (dry-run by default)
 
 The original QSyncAMFM 1.1.3 implementation defines group create/update
 (`37 3D 01` plus a 60-byte FM record), delete (`32 02 <reversed page>`),
-and gateway erase (`02 00`). These are **not yet live-tested** from this
-project. All three operations default to printing the proposed packet without
-sending it.
+and gateway erase (`02 00`). Create and delete have been tested with a disposable group; gateway erase has not been live-tested from Python. All three operations default to printing the proposed packet without sending it.
 
 ```bash
 qmotion-admin --host 192.168.1.206 create spare
@@ -110,10 +108,7 @@ A working group must already exist on the gateway. Pairing takes its
 qmotion-admin --host 192.168.1.206 pair homeassistant
 ```
 
-The wizard asks you to raise the blind fully, confirms before transmitting
-Special Learn, pauses while you tug the blind and observe the motor jog,
-then requires a separate `PAIR` confirmation before sending the completion
-packet. It never automatically erases groups, resets the motor or modifies
+The wizard is a **dry-run by default**. Add `--send` to enable real pairing. In live mode it asks you to raise the blind fully, confirms before transmitting Special Learn, pauses while you tug the blind and observe the motor jog, then requires a separate `PAIR` confirmation before sending the completion packet. It never automatically erases groups, resets the motor or modifies
 any other group. To abandon, enter anything other than the requested
 confirmation. If the learning window expires, restart the sequence.
 
@@ -125,9 +120,17 @@ To rehearse the complete interactive pairing workflow **without transmitting
 any commands**, use:
 
 ```bash
-qmotion-admin --host 192.168.1.206 pair homeassistant --dry-run
+qmotion-admin --host 192.168.1.206 pair homeassistant
 ```
 
 This reads the group's channel and page address, previews both packet bytes,
 and runs all confirmation prompts. Every RF operation is simulated; the
 gateway receives only the read-only group sync request.
+
+To perform **live pairing**, explicitly add `--send`:
+
+```bash
+qmotion-admin --host 192.168.1.206 pair homeassistant --send
+```
+
+Default pairing dry-run performs group discovery and simulates all steps without sending RF commands. No physical tug is needed for rehearsal.
