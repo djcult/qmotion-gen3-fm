@@ -65,3 +65,38 @@ python3 -m unittest discover -s tests
 ## Safety
 
 No gateway erase or group deletion is currently exposed in the CLI. Such operations will be added only after careful protocol validation and with explicit confirmation.
+
+
+## Experimental administration (dry-run by default)
+
+The original QSyncAMFM 1.1.3 implementation defines group create/update
+(`37 3D 01` plus a 60-byte FM record), delete (`32 02 <reversed page>`),
+and gateway erase (`02 00`). These are **not yet live-tested** from this
+project. All three operations default to printing the proposed packet without
+sending it.
+
+```bash
+qmotion-admin --host 192.168.1.206 create spare
+qmotion-admin --host 192.168.1.206 delete spare
+qmotion-admin --host 192.168.1.206 erase
+```
+
+Creating the **first** group on an empty gateway requires its independently
+verified MAC address because no existing group record supplies it:
+
+```bash
+qmotion-admin --host 192.168.1.206 create spare --mac AA:BB:CC:DD:EE:FF
+```
+
+This is an illustrative MAC only; use your gateway's actual MAC.
+
+When physically present and ready to test with a disposable group, add
+`--send`. The CLI then requires a typed confirmation. Erase requires
+typing `ERASE <gateway-ip>` and removes **all gateway group and scene data**;
+it may leave RF assignments stored in the motors. Never use it casually.
+Deletion removes a **gateway group record**, not necessarily the shade's
+learned association; removing a blind from a group is a separate pairing
+operation. Re-read `groups` after each test.
+
+Do not test delete or erase on a working, sole group. Test creation of a
+disposable group first and verify its returned page address through sync.
