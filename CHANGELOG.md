@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.1 — 2026-10-24
 
 - Home Assistant cover now exposes last-commanded position as **assumed** rather than always unknown.
 - At startup, initial position comes from the gateway's stored FM group position, if valid.
