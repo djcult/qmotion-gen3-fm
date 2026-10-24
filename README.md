@@ -100,3 +100,23 @@ operation. Re-read `groups` after each test.
 
 Do not test delete or erase on a working, sole group. Test creation of a
 disposable group first and verify its returned page address through sync.
+
+## Guided shade pairing
+
+A working group must already exist on the gateway. Pairing takes its
+**name** and reads the channel and page address directly from gateway sync:
+
+```bash
+qmotion-admin --host 192.168.1.206 pair homeassistant
+```
+
+The wizard asks you to raise the blind fully, confirms before transmitting
+Special Learn, pauses while you tug the blind and observe the motor jog,
+then requires a separate `PAIR` confirmation before sending the completion
+packet. It never automatically erases groups, resets the motor or modifies
+any other group. To abandon, enter anything other than the requested
+confirmation. If the learning window expires, restart the sequence.
+
+Pairing is a physical process and must be performed while observing the
+blind. Successful TCP transmission does not establish successful RF
+delivery; verify normal controls and the existing handheld remote afterwards.
