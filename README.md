@@ -1,6 +1,6 @@
 # QMotion Gen 3 FM
 
-![QMotion QSYNC433FM gateway showing underside model label, Ethernet/power connections and antenna](docs/images/qsync433fm.webp)
+![QMotion QSYNC433FM gateway showing underside model label, Ethernet/power connections and antenna](docs/images/s-l1600.webp)
 
 *QMotion QSYNC433FM gateway (underside view). Photograph from [eBay listing 880011062879](https://www.ebay.co.uk/itm/880011062879); reproduced for hardware identification.*
 
