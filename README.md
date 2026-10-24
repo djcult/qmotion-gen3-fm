@@ -4,25 +4,19 @@
 
 *QMotion QSYNC433FM gateway (underside view). Photograph from [eBay listing 880011062879](https://www.ebay.co.uk/itm/880011062879); reproduced for hardware identification.*
 
-Independent Python implementation of the **QMotion Gen 3 FM** protocol using the **QSYNC433FM** TCP/IP gateway. No dependency on third-party QSync libraries or the original Android app at runtime.
+Independent, local Python support for **QMotion Gen 3 FM blinds** through a **QSYNC433FM** Ethernet gateway. Includes a standalone administration CLI and an **optional** Home Assistant integration. No dependency on the original Android app or third-party QSync libraries at runtime.
 
-## Status
+**v0.1.0:** Gateway group discovery, group creation/deletion, physical-tug pairing and open/close have been tested on real hardware. HACS installation and basic Home Assistant blind control have also been confirmed working.
 
-**v0.1.0 — first hardware-tested Home Assistant release.** Tested on a QSYNC433FM gateway on 24 October 2026:
+## 1. Initial setup — administration CLI
 
-- Gateway group synchronisation (`16 00`)
-- Special Learn preparation and physical-tug pairing
-- Pairing completion
-- Open and close via position commands (`0` fully open, `100` fully closed)
-- Existing handheld remote remains functional after adding the gateway
-- Standalone CLI group creation and deletion using a disposable FM group
-- HACS installation and Home Assistant cover control (confirmed working with a real blind)
+Use the CLI to configure the gateway and pair your blinds **before** installing Home Assistant. You can use it on any computer that can reach the gateway over TCP port `9760`. Home Assistant is not required.
 
-**Still unverified or unsupported:** gateway erase from Python, intermediate-position accuracy, Stop, actual motor-position feedback, and dynamic group discovery without reloading the integration.
+### Prerequisites: install the CLI
 
-## Installation and CLI
-
-Python 3.10+:
+- QSYNC433FM gateway powered, connected to the same network, with a known IP address.
+- Python 3.10 or later, Git and a working Python virtual environment.
+- The original handheld remote, and physical access to the blind for pairing.
 
 ```bash
 git clone https://github.com/djcult/qmotion-gen3-fm.git
@@ -30,173 +24,161 @@ cd qmotion-gen3-fm
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
+```
+
+In the examples below, replace `192.168.1.206` with **your gateway IP**, and `livingroom` with **your chosen group name**. The addresses and names are examples, not universal defaults.
+
+### Step 1 — inspect or (optionally) reset the gateway
+
+First list the existing groups:
+
+```bash
 qmotion-admin --host 192.168.1.206 groups
 ```
 
-Use your gateway's IP address in place of the example.
+**You do not need to reset a new or correctly configured gateway.** If the gateway has old, orphaned or conflicting groups and you intentionally want to start from scratch, you can *preview* the erase operation:
 
 ```bash
-qmotion-admin --host 192.168.1.206 position homeassistant 100
-qmotion-admin --host 192.168.1.206 position homeassistant 0
-qmotion-admin --host 192.168.1.206 pair homeassistant
-```
-
-Commands that transmit RF require interactive confirmation. **Pair only when physically present** to observe motor movement and jogs. Pairing is stateful; a wrong completion command could alter the motor's controller assignments. Never erase or reset a motor to troubleshoot basic control.
-
-## Architecture
-
-- `src/qmotion_gen3_fm/protocol.py`: frame and packet encoding
-- `src/qmotion_gen3_fm/gateway.py`: TCP transport, group parsing and operations
-- `src/qmotion_gen3_fm/cli.py`: standalone administration CLI
-- `tests/`: offline protocol tests
-- `custom_components/qmotion_gen3_fm/`: HACS-compatible cover integration using a bundled copy of the same library
-
-The gateway is authoritative for group configuration. Records are distinguished using both channel and page address; duplicate channel values should be investigated, not silently deduplicated.
-
-## Protocol notes
-
-| Operation | Bytes |
-|---|---|
-| Sync | `16 00` |
-| Set position | `38 02 <channel> <0..100>` |
-| Special Learn prepare | `38 02 <channel> FA` |
-| Complete pairing | `34 03 <page_hi> <page_lo> <channel>` |
-
-The pairing bytes and 0/100 movement commands were verified in October 2026 against the QSYNC433FM. Protocol reference: decompilation of **QSyncAMFM 1.1.3**. This project is an independent implementation, not a fork.
-
-## Tests
-
-```bash
-python3 -m unittest discover -s tests
-```
-
-## Safety
-
-Delete and erase are available only with `--send` and explicit confirmation.
-
-
-## Experimental administration (dry-run by default)
-
-The original QSyncAMFM 1.1.3 implementation defines group create/update
-(`37 3D 01` plus a 60-byte FM record), delete (`32 02 <reversed page>`),
-and gateway erase (`02 00`). Create and delete have been tested with a disposable group; gateway erase has not been live-tested from Python. All three operations default to printing the proposed packet without sending it.
-
-```bash
-qmotion-admin --host 192.168.1.206 create spare
-qmotion-admin --host 192.168.1.206 delete spare
 qmotion-admin --host 192.168.1.206 erase
 ```
 
-Creating the **first** group on an empty gateway requires its independently
-verified MAC address because no existing group record supplies it:
+To actually erase all gateway groups and scenes:
 
 ```bash
-qmotion-admin --host 192.168.1.206 create spare --mac AA:BB:CC:DD:EE:FF
+qmotion-admin --host 192.168.1.206 erase --send
 ```
 
-This is an illustrative MAC only; use your gateway's actual MAC.
+You must type `ERASE 192.168.1.206` when prompted. **Warning:** This is destructive to gateway configuration; learned motor associations may persist, and existing blinds may need re-pairing. The Python erase command is derived from the original app but **has not yet been hardware-tested**. Don't run it merely to check that the command works.
 
-When physically present and ready to test with a disposable group, add
-`--send`. The CLI then requires a typed confirmation. Erase requires
-typing `ERASE <gateway-ip>` and removes **all gateway group and scene data**;
-it may leave RF assignments stored in the motors. Never use it casually.
-Deletion removes a **gateway group record**, not necessarily the shade's
-learned association; removing a blind from a group is a separate pairing
-operation. Re-read `groups` after each test.
+If you do erase, run `groups` again to confirm the gateway reports no groups.
 
-Do not test delete or erase on a working, sole group. Test creation of a
-disposable group first and verify its returned page address through sync.
+### Step 2 — create a group
 
-## Guided shade pairing
-
-A working group must already exist on the gateway. Pairing takes its
-**name** and reads the channel and page address directly from gateway sync:
+A group represents the gateway address that one or more blinds will learn. First preview creation:
 
 ```bash
-qmotion-admin --host 192.168.1.206 pair homeassistant
+qmotion-admin --host 192.168.1.206 create livingroom
 ```
 
-The wizard is a **dry-run by default**. Add `--send` to enable real pairing. In live mode it asks you to raise the blind fully, confirms before transmitting Special Learn, pauses while you tug the blind and observe the motor jog, then requires a separate `PAIR` confirmation before sending the completion packet. It never automatically erases groups, resets the motor or modifies
-any other group. To abandon, enter anything other than the requested
-confirmation. If the learning window expires, restart the sequence.
-
-Pairing is a physical process and must be performed while observing the
-blind. Successful TCP transmission does not establish successful RF
-delivery; verify normal controls and the existing handheld remote afterwards.
-
-To rehearse the complete interactive pairing workflow **without transmitting
-any commands**, use:
+Then create it:
 
 ```bash
-qmotion-admin --host 192.168.1.206 pair homeassistant
+qmotion-admin --host 192.168.1.206 create livingroom --send
+qmotion-admin --host 192.168.1.206 groups
 ```
 
-This reads the group's channel and page address, previews both packet bytes,
-and runs all confirmation prompts. Every RF operation is simulated; the
-gateway receives only the read-only group sync request.
+The CLI chooses an unused FM channel and the gateway allocates its page address. Creation is dry-run by default; `--send` also requires typed confirmation.
 
-To perform **live pairing**, explicitly add `--send`:
+**Important for an empty gateway:** The CLI cannot currently obtain the gateway MAC from group records if no groups exist. Supply your independently verified **gateway MAC**, for example:
 
 ```bash
-qmotion-admin --host 192.168.1.206 pair homeassistant --send
+qmotion-admin --host 192.168.1.206 create livingroom --mac AA:BB:CC:DD:EE:FF --send
 ```
 
-Default pairing dry-run performs group discovery and simulates all steps without sending RF commands. No physical tug is needed for rehearsal.
+`AA:BB:CC:DD:EE:FF` is a placeholder — **do not use it as an actual address**. If you cannot verify the MAC, do not guess; the first-group setup is not yet fully automated.
 
-## Home Assistant integration (v0.1.0)
+### Step 3 — pair each blind to its group
 
-The `custom_components/qmotion_gen3_fm/` folder is structured for HACS.
-It bundles a byte-identical copy of this project's own gateway and protocol
-implementation under `vendor/`; there are **no runtime dependencies on a
-third-party QSync library or an unpublished PyPI package**.
+The CLI looks up the channel and page address automatically using the group name. You don't need to type raw packets.
 
-**Install (manual):**
-
-1. Copy `custom_components/qmotion_gen3_fm/` from this repository into
-   your HA configuration's `custom_components/` directory.
-2. Restart Home Assistant.
-3. Open Settings → Devices & services → Add integration → **QMotion Gen 3 FM**.
-4. Enter your gateway IP (example: `192.168.1.206`).
-5. The integration reads existing gateway groups and exposes one cover per
-   group. The group setup/pairing CLI remains separate.
-
-**Install using HACS:** Add
-`https://github.com/djcult/qmotion-gen3-fm` as a custom
-**Integration** repository in HACS, download it, restart Home Assistant,
-and add it under Devices & services. This repository has not yet been
-submitted to a curated catalog.
-
-**Features:** Open, Close, and Set Position (0% closed, 100% open in HA).
-The integration reverses percentages to QSync's wire convention (0% open,
-100% closed). The two end positions were verified with real hardware in
-the CLI; intermediate positions are not yet physically verified.
-**Stop is intentionally not exposed**, as its command is unverified.
-
-**Important:** FM control is one-way. The gateway does not report actual
-motor position or changes from the handheld remote. The integration does
-not fabricate a current position: its cover state may show unknown/assumed.
-TCP transmission does not mean that the motor received the RF command.
-Group additions/deletions are discovered on HA integration reload/restart,
-not continuously. Do not pair or erase from inside HA; use `qmotion-admin`.
-
-**Developer:** Keep the bundled library in sync whenever the Python
-library changes:
+Rehearse the workflow safely (**dry-run by default**):
 
 ```bash
-python scripts/sync_vendor.py
-python scripts/sync_vendor.py --check
+qmotion-admin --host 192.168.1.206 pair livingroom
+```
+
+For actual pairing, stand beside the blind and run:
+
+```bash
+qmotion-admin --host 192.168.1.206 pair livingroom --send
+```
+
+Follow the interactive prompts:
+
+1. Raise the blind fully using its **existing handheld remote**; type `READY`.
+2. Confirm `SEND` to transmit the **Special Learn** preparation command. The blind should lower toward its programming position.
+3. Once movement stops, gently tug the blind's accessible hembar or operating cord. Watch for a brief **jog**; enter `JOG` only if you observed one.
+4. Confirm `PAIR` to send the final pairing packet. The blind should jog again and return to its upper limit.
+5. Check that the handheld remote **still works**.
+
+If no jog occurs, **do not confirm the final pairing command**. Cancel and investigate; if the learning window times out, restart the pairing sequence. To associate multiple blinds with the same group, repeat the guided process for each blind. Do not reset the motor as a troubleshooting shortcut.
+
+### Step 4 — test movement
+
+When the blind has completed pairing, test ordinary movement:
+
+```bash
+# Fully close (QSync 100%)
+qmotion-admin --host 192.168.1.206 position livingroom 100
+
+# Fully open (QSync 0%)
+qmotion-admin --host 192.168.1.206 position livingroom 0
+```
+
+The CLI requests confirmation before sending movement commands. Observe the blind; a successful TCP send does not guarantee RF delivery. Intermediate percentage positions are implemented but not yet physically validated.
+
+**Optional group maintenance:**
+
+```bash
+# Preview deletion: no command transmitted
+qmotion-admin --host 192.168.1.206 delete livingroom
+
+# Actually delete the gateway group, after confirmation
+qmotion-admin --host 192.168.1.206 delete livingroom --send
+```
+
+Deleting a gateway group does **not necessarily remove its identity from a blind's motor**. Create and delete were validated with a disposable group. Avoid deleting a group that controls a working blind.
+
+## 2. Home Assistant installation — optional (HACS)
+
+Once your gateway and blinds work through the admin CLI, you can add them to Home Assistant. This integration handles **everyday cover control only**; use `qmotion-admin` for creating, deleting and pairing groups.
+
+### Install with HACS
+
+1. Open **HACS** in Home Assistant and add `https://github.com/djcult/qmotion-gen3-fm` as a **custom repository**, category **Integration**.
+2. Download **QMotion Gen 3 FM** from HACS.
+3. Restart Home Assistant.
+4. Open **Settings → Devices & services → Add integration**.
+5. Search for **QMotion Gen 3 FM** and enter your gateway IP address.
+6. Home Assistant reads the configured gateway groups and creates a **cover entity** for each one. Use the cover's Open and Close controls to test.
+
+This repository is available as a HACS custom repository; it has not been submitted to the default curated catalog.
+
+**Manual alternative:** Copy `custom_components/qmotion_gen3_fm/` into your Home Assistant configuration's `custom_components/` directory, restart Home Assistant, then follow steps 4–6 above.
+
+### Home Assistant behaviour and limitations
+
+- Supports **Open**, **Close**, and **Set Position**. Home Assistant uses **0% closed / 100% open**; the integration converts this to QSync's opposite wire convention.
+- **One-way RF:** The motor does not report its actual position, including changes made with the physical remote. HA deliberately does not invent a current-position value.
+- **Stop is not supported** because the packet has not yet been validated. Intermediate positions also await hardware validation.
+- If groups are added or removed with the CLI, **reload the Home Assistant integration** to discover the changes. Group discovery is not continuous.
+- HACS installs a bundled copy of **this project's own** protocol implementation. No separate PyPI install or forked QSync dependency is needed.
+
+Installation and basic Home Assistant blind control were successfully tested on a QSYNC433FM in October 2026. Other motor generations and gateway variants have not been verified.
+
+## Compatibility and technical details
+
+**Verified:** QMotion Gen 3 FM blinds, QSYNC433FM gateway, TCP port `9760`. **Not verified:** Gen 2 AM, other gateways, actual position feedback, Stop, intermediate position accuracy, and the Python gateway-erase command.
+
+Protocol commands recovered from QSyncAMFM v1.1.3 and confirmed where noted:
+
+| Function | TCP bytes | Status |
+|---|---|---|
+| List gateway groups | `16 00` | Verified |
+| Move to position | `38 02 <channel> <0..100>` | Endpoints verified |
+| Special Learn preparation | `38 02 <channel> FA` | Verified |
+| Pairing completion | `34 03 <page_hi> <page_lo> <channel>` | Verified |
+| Create/update group | `37 3D 01` + 60-byte record | Creation verified |
+| Delete group | `32 02 <page_hi> <page_lo>` | Verified |
+| Erase gateway | `02 00` | Not tested from Python |
+
+**Architecture:** `src/qmotion_gen3_fm/` holds the shared standard-library Python protocol, transport and admin CLI; `custom_components/qmotion_gen3_fm/` provides the HACS integration with a synchronized bundled copy of the protocol implementation. The gateway is the source of truth for group configuration; channel and page address together identify a group.
+
+For developers:
+
+```bash
 python -m unittest discover -s tests -v
+python scripts/sync_vendor.py --check
 ```
 
-The integration's installation and basic blind control have been **confirmed working in Home Assistant on real hardware**. This is an early release: intermediate percentages, Stop, state reporting, multi-group setups and long-term reliability still need broader testing.
-
-## Compatibility and limitations
-
-- **Verified hardware:** QMotion Gen 3 FM blind using the QSYNC433FM gateway (TCP port 9760). Other QMotion generations, AM gateways, and models are untested.
-- **Verified HA functions:** HACS installation and basic control from a Home Assistant cover entity (24 October 2026).
-- **FM status:** The system provides one-way RF control. The handheld remote can move the blind without HA knowing; no actual position is reported.
-- **Group administration:** Use the standalone CLI, not Home Assistant. Group changes require reloading the integration.
-- **Gateway erase:** Implemented with a guarded `--send` option but intentionally not exercised from Python against the working gateway.
-- **Experimental:** Preset/percentage positions between the two end limits and the stop command still require validation.
-
-See [CHANGELOG.md](CHANGELOG.md) for release details.
+See [CHANGELOG.md](CHANGELOG.md) for release history. The code is distributed under the [MIT licence](LICENSE).
