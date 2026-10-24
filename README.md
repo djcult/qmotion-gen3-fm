@@ -1,5 +1,9 @@
 # QMotion Gen 3 FM
 
+![QMotion QSYNC433FM gateway showing underside model label, Ethernet/power connections and antenna](docs/images/qsync433fm.webp)
+
+*QMotion QSYNC433FM gateway (underside view). Photograph from [eBay listing 880011062879](https://www.ebay.co.uk/itm/880011062879); reproduced for hardware identification.*
+
 Independent Python implementation of the **QMotion Gen 3 FM** protocol using the **QSYNC433FM** TCP/IP gateway. No dependency on third-party QSync libraries or the original Android app at runtime.
 
 ## Status
