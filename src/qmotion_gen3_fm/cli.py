@@ -15,6 +15,47 @@ def confirm(token, message):
     if input(f"{message}\nType {token} to continue: ").strip() != token:
         raise SystemExit("Cancelled; no command sent")
 
+def run_pairing(gateway, group, ask=input, output=print):
+    """Guide an operator through pairing without modifying unrelated groups.
+
+    The motor's physical jog is the only confirmation of successful RF reception.
+    """
+    from .protocol import prepare_pairing, complete_pairing
+
+    prepare = prepare_pairing(group.channel)
+    finish = complete_pairing(group.channel, group.page)
+    output(f"\nPairing group {group.name!r}")
+    output(f"  Channel: {group.channel}")
+    output(f"  Page address: {group.page.hex(' ')}")
+    output(f"  Preparation: {prepare.hex(' ')}")
+    output(f"  Completion:  {finish.hex(' ')}")
+    output("This procedure modifies the motor's learned controller assignments.")
+    output("Keep the original handheld remote available; do not reset the blind.")
+    if ask("Raise the blind FULLY using its remote. Type READY when positioned: ").strip() != "READY":
+        output("Cancelled: no RF command sent.")
+        return False
+
+    if ask("Send Special Learn preparation? Type SEND: ").strip() != "SEND":
+        output("Cancelled: no RF command sent.")
+        return False
+    gateway.prepare_pairing(group.channel)
+    output("Preparation transmitted. Watch for the blind to lower toward its learn position.")
+    output("Once movement stops, gently tug the accessible blind cord.")
+    output("The motor should give a short JOG confirming selection.")
+    if ask("Did the blind JOG after your tug? Type JOG to proceed: ").strip() != "JOG":
+        output("Stopped: pairing completion was NOT sent. If learning times out, restart pairing.")
+        return False
+
+    if ask(f"Complete pairing to {group.name!r} (page {group.page.hex(' ')})? Type PAIR: ").strip() != "PAIR":
+        output("Stopped: pairing completion was NOT sent.")
+        return False
+    gateway.complete_pairing(group)
+    output("Completion command transmitted.")
+    output("Watch for another jog and the blind returning to its upper limit.")
+    output("Verify open/close separately, and verify the original remote still works.")
+    output("No motor acknowledgement is available over this one-way RF protocol.")
+    return True
+
 def main():
     parser = argparse.ArgumentParser(description="QMotion Gen 3 FM QSync administration")
     parser.add_argument("--host", required=True, help="QSync gateway IP")
@@ -80,14 +121,7 @@ def main():
         return
     elif args.command == "pair":
         group = choose(groups, args.group)
-        print(f"Pair {group.name!r}, channel={group.channel}, page={group.page.hex(' ')}")
-        confirm("SEND", "Raise blind fully. Send Special Learn preparation?")
-        gateway.prepare_pairing(group.channel)
-        if input("After the motor stops, gently tug. Did it JOG? Type JOG: ").strip() != "JOG":
-            raise SystemExit("No completion command sent")
-        confirm("SEND", "Send pairing completion? This modifies learned controllers.")
-        gateway.complete_pairing(group)
-        print("Pairing completion transmitted; verify control and original remote")
+        run_pairing(gateway, group)
         return
     if not args.send:
         print("DRY RUN: nothing transmitted. Add --send to permit transmission.")
