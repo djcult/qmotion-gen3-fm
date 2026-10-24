@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qmotion-gen3-fm"
+version = "0.1.0"
+description = "Independent QMotion Gen 3 FM gateway protocol and administration CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "djcult"}]
+dependencies = []
+
+[project.scripts]
+qmotion-admin = "qmotion_gen3_fm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
