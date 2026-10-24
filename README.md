@@ -120,3 +120,14 @@ confirmation. If the learning window expires, restart the sequence.
 Pairing is a physical process and must be performed while observing the
 blind. Successful TCP transmission does not establish successful RF
 delivery; verify normal controls and the existing handheld remote afterwards.
+
+To rehearse the complete interactive pairing workflow **without transmitting
+any commands**, use:
+
+```bash
+qmotion-admin --host 192.168.1.206 pair homeassistant --dry-run
+```
+
+This reads the group's channel and page address, previews both packet bytes,
+and runs all confirmation prompts. Every RF operation is simulated; the
+gateway receives only the read-only group sync request.
