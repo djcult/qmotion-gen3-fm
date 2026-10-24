@@ -6,7 +6,7 @@
 
 Independent, local Python support for **QMotion Gen 3 FM blinds** through a **QSYNC433FM** Ethernet gateway. Includes a standalone administration CLI and an **optional** Home Assistant integration. No dependency on the original Android app or third-party QSync libraries at runtime.
 
-**v0.1.0:** Gateway group discovery, group creation/deletion, physical-tug pairing and open/close have been tested on real hardware. HACS installation and basic Home Assistant blind control have also been confirmed working.
+**Initial hardware-tested release:** Gateway group discovery, group creation/deletion, physical-tug pairing and open/close have been tested on real hardware. HACS installation and basic Home Assistant blind control have also been confirmed working.
 
 ## 1. Initial setup — administration CLI
 
@@ -149,7 +149,8 @@ This repository is available as a HACS custom repository; it has not been submit
 ### Home Assistant behaviour and limitations
 
 - Supports **Open**, **Close**, and **Set Position**. Home Assistant uses **0% closed / 100% open**; the integration converts this to QSync's opposite wire convention.
-- **One-way RF:** The motor does not report its actual position, including changes made with the physical remote. HA deliberately does not invent a current-position value.
+- **Assumed last-commanded position:** On startup HA uses the position stored in the gateway's FM group record; after HA sends a movement command it shows that requested position (0% closed, 100% open). This is **not measured motor position**, and the cover retains `assumed_state=True`. The `position_source` attribute distinguishes `gateway_record` from `home_assistant_command`.
+- **One-way RF:** The motor does not report actual position. The handheld remote talks directly to the motor and may leave the displayed position stale. A successful TCP command does not guarantee the blind moved; the displayed value is the requested position.
 - **Stop is not supported** because the packet has not yet been validated. Intermediate positions also await hardware validation.
 - If groups are added or removed with the CLI, **reload the Home Assistant integration** to discover the changes. Group discovery is not continuous.
 - HACS installs a bundled copy of **this project's own** protocol implementation. No separate PyPI install or forked QSync dependency is needed.
@@ -182,3 +183,14 @@ python scripts/sync_vendor.py --check
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for release history. The code is distributed under the [MIT licence](LICENSE).
+
+### Position-tracking behaviour (development update)
+
+The Home Assistant cover now displays an **assumed last-commanded position** rather than an unknown value:
+
+- On integration setup/reload, it reads the position byte in the gateway's saved FM group record (byte offset 30 of the 60-byte record). An invalid value remains unknown.
+- After a Home Assistant command completes at the TCP transport layer, it updates the displayed position to the requested value, converted to HA's position convention.
+- Commands from the physical remote do **not** update Home Assistant. The gateway's saved position may also be stale after direct movement; reload is not guaranteed to recover actual physical position.
+- The integration deliberately exposes no Stop function or actual-position feedback.
+
+This change is committed after the initial v0.1.0 release documentation and requires a newer HACS checkout/reload. Actual on-device testing of position display remains outstanding.
