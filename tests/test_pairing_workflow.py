@@ -29,6 +29,17 @@ class PairingWorkflowTests(unittest.TestCase):
         self.assertEqual(gw.calls, [("prepare", 9), ("complete", "homeassistant", bytes.fromhex("00 02"))])
         self.assertTrue(any("34 03 02 00 09" in line for line in messages))
 
+    def test_dry_run_never_transmits(self):
+        gw = FakeGateway()
+        messages = []
+        ok = run_pairing(gw, FakeGroup(),
+                         responses("READY", "SEND", "JOG", "PAIR"),
+                         messages.append, dry_run=True)
+        self.assertTrue(ok)
+        self.assertEqual(gw.calls, [])
+        self.assertTrue(any("DRY RUN" in message for message in messages))
+        self.assertTrue(any("NOT transmitted" in message for message in messages))
+
     def test_cancel_before_transmission(self):
         for replies in [("NO",), ("READY", "NO")]:
             with self.subTest(replies=replies):
