@@ -1,7 +1,7 @@
 {
   "domain": "qmotion_gen3_fm",
   "name": "QMotion Gen 3 FM",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "documentation": "https://github.com/djcult/qmotion-gen3-fm",
   "issue_tracker": "https://github.com/djcult/qmotion-gen3-fm/issues",
   "codeowners": [
